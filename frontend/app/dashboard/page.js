@@ -4,9 +4,9 @@ import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { Trash2, Edit3, Plus, CheckCircle, Circle, X, Save, LogOut, Award } from 'lucide-react';
 
-// Carga dinámica segura de Rive (Despliegue Mobile-First del lado del cliente)
+// Carga dinámica CORRECTA del componente Rive del lado del cliente (Extrae .Rive explícitamente)
 const Rive = dynamic(
-  () => import('@rive-app/react-canvas').then((mod) => mod.default || mod),
+  () => import('@rive-app/react-canvas').then((mod) => mod.Rive),
   { ssr: false }
 );
 
