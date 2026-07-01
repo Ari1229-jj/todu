@@ -1,53 +1,179 @@
 'use client';
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { Eye, EyeOff, X } from 'lucide-react';
 
 export default function RegistroPage() {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
+  // Estados del Formulario
+  const [nombres, setNombres] = useState('');
+  const [apellidoP, setApellidoP] = useState('');
+  const [apellidoM, setApellidoM] = useState('');
+  const [fechaNacimiento, setFechaNacimiento] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   
+  // Estados para Checkbox Legales
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [aceptaPrivacidad, setAceptaPrivacidad] = useState(false);
+
+  // Estados de Alerta y Feedback
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [cargando, setCargando] = useState(false);
+
   // Estados independientes para cada recuadro (Modal)
   const [modalTerminos, setModalTerminos] = useState(false);
   const [modalPrivacidad, setModalPrivacidad] = useState(false);
 
+  // Función para procesar el envío del registro al API Gateway
+  const manejarRegistro = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    // Validación de casillas obligatorias antes de disparar peticiones
+    if (!aceptaTerminos || !aceptaPrivacidad) {
+      setErrorMsg('Debes aceptar los Términos y el Aviso de Privacidad para continuar.');
+      return;
+    }
+
+    setCargando(true);
+
+    // Unificamos el formato para cumplir con la propiedad "nombre" esperada por user-service
+    const nombreCompleto = `${nombres.trim()} ${apellidoP.trim()} ${apellidoM.trim()}`.trim();
+
+    try {
+      const res = await fetch(`${API_URL}/auth/registro`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          nombre: nombreCompleto,
+          email: email,
+          password: password,
+          fechaNacimiento: fechaNacimiento // Se envía opcional por si el microservicio lo almacena
+        }),
+      });
+
+      const datos = await res.json();
+
+      if (!res.ok) {
+        // Mapea los mensajes de error documentados (409 Email registrado, 400 datos faltantes)
+        throw new Error(datos.mensaje || 'Ocurrió un error al procesar el registro.');
+      }
+
+      setSuccessMsg('¡Usuario registrado con éxito! Redirigiendo al login...');
+      
+      // Limpiamos el formulario
+      setNombres('');
+      setApellidoP('');
+      setApellidoM('');
+      setFechaNacimiento('');
+      setEmail('');
+      setPassword('');
+
+      // Redirigir al login tras 2 segundos para que lea el mensaje de éxito
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 2000);
+
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setCargando(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-sans relative">
-      <div className="bg-white w-full max-w-md rounded-xl shadow-lg border border-gray-100 p-8">
+      <div className="bg-white w-full max-w-md rounded-xl shadow-lg border border-gray-100 p-8 my-8">
         
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-[#0046b0] mb-2">Todú</h1>
           <p className="text-gray-600 text-sm">Crea tu cuenta para comenzar.</p>
         </div>
 
-        <form className="space-y-6">
+        {/* Alertas de Feedback */}
+        {errorMsg && (
+          <div className="mb-4 p-3 text-xs bg-red-50 text-red-600 border border-red-200 rounded-xl font-medium">
+            {errorMsg}
+          </div>
+        )}
+        {successMsg && (
+          <div className="mb-4 p-3 text-xs bg-green-50 text-green-600 border border-green-200 rounded-xl font-medium">
+            {successMsg}
+          </div>
+        )}
+
+        <form onSubmit={manejarRegistro} className="space-y-6">
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Nombre(s)</label>
-            <input type="text" className="w-full border-b-2 border-gray-200 focus:border-[#0046b0] outline-none py-2 transition-colors bg-transparent" />
+            <input 
+              type="text" 
+              value={nombres}
+              onChange={(e) => setNombres(e.target.value)}
+              className="w-full border-b-2 border-gray-200 focus:border-[#0046b0] outline-none py-2 transition-colors bg-transparent text-gray-800 text-sm" 
+              required
+            />
           </div>
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Apellido Paterno</label>
-            <input type="text" className="w-full border-b-2 border-gray-200 focus:border-[#0046b0] outline-none py-2 transition-colors bg-transparent" />
+            <input 
+              type="text" 
+              value={apellidoP}
+              onChange={(e) => setApellidoP(e.target.value)}
+              className="w-full border-b-2 border-gray-200 focus:border-[#0046b0] outline-none py-2 transition-colors bg-transparent text-gray-800 text-sm" 
+              required
+            />
           </div>
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Apellido Materno</label>
-            <input type="text" className="w-full border-b-2 border-gray-200 focus:border-[#0046b0] outline-none py-2 transition-colors bg-transparent" />
+            <input 
+              type="text" 
+              value={apellidoM}
+              onChange={(e) => setApellidoM(e.target.value)}
+              className="w-full border-b-2 border-gray-200 focus:border-[#0046b0] outline-none py-2 transition-colors bg-transparent text-gray-800 text-sm" 
+            />
           </div>
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Fecha de Nacimiento</label>
-            <input type="date" className="w-full border-b-2 border-gray-200 focus:border-[#0046b0] outline-none py-2 transition-colors text-gray-500 bg-transparent" />
+            <input 
+              type="date" 
+              value={fechaNacimiento}
+              onChange={(e) => setFechaNacimiento(e.target.value)}
+              className="w-full border-b-2 border-gray-200 focus:border-[#0046b0] outline-none py-2 transition-colors text-gray-600 bg-transparent text-sm" 
+              required
+            />
           </div>
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Correo Electrónico</label>
-            <input type="email" className="w-full border-b-2 border-gray-200 focus:border-[#0046b0] outline-none py-2 transition-colors bg-transparent" />
+            <input 
+              type="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border-b-2 border-gray-200 focus:border-[#0046b0] outline-none py-2 transition-colors bg-transparent text-gray-800 text-sm" 
+              required
+            />
           </div>
 
           <div className="relative">
             <label className="block text-sm font-semibold text-gray-700 mb-1">Contraseña</label>
-            <input type={showPassword ? "text" : "password"} className="w-full border-b-2 border-gray-200 focus:border-[#0046b0] outline-none py-2 transition-colors bg-transparent" />
+            <input 
+              type={showPassword ? "text" : "password"} 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full border-b-2 border-gray-200 focus:border-[#0046b0] outline-none py-2 transition-colors bg-transparent text-gray-800 text-sm" 
+              required
+            />
             <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-0 bottom-2 text-gray-400 hover:text-gray-600">
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
@@ -55,12 +181,17 @@ export default function RegistroPage() {
 
           <div className="space-y-3 pt-2">
             <label className="flex items-center gap-3 text-sm text-gray-600 cursor-pointer">
-              <input type="checkbox" className="w-5 h-5 rounded border-gray-300 text-[#0046b0] focus:ring-[#0046b0]" />
+              <input 
+                type="checkbox" 
+                checked={aceptaTerminos}
+                onChange={(e) => setAceptaTerminos(e.target.checked)}
+                className="w-5 h-5 rounded border-gray-300 text-[#0046b0] focus:ring-[#0046b0]" 
+              />
               <span>
                 Acepto los{' '}
                 <span 
                   onClick={(e) => {
-                    e.preventDefault(); // Evita que marque el checkbox al dar clic en el texto
+                    e.preventDefault(); 
                     setModalTerminos(true);
                   }} 
                   className="underline text-[#0046b0] font-medium hover:text-[#00368a]"
@@ -71,12 +202,17 @@ export default function RegistroPage() {
             </label>
             
             <label className="flex items-center gap-3 text-sm text-gray-600 cursor-pointer">
-              <input type="checkbox" className="w-5 h-5 rounded border-gray-300 text-[#0046b0] focus:ring-[#0046b0]" />
+              <input 
+                type="checkbox" 
+                checked={aceptaPrivacidad}
+                onChange={(e) => setAceptaPrivacidad(e.target.checked)}
+                className="w-5 h-5 rounded border-gray-300 text-[#0046b0] focus:ring-[#0046b0]" 
+              />
               <span>
                 He leído el{' '}
                 <span 
                   onClick={(e) => {
-                    e.preventDefault(); // Evita que marque el checkbox al dar clic en el texto
+                    e.preventDefault(); 
                     setModalPrivacidad(true);
                   }} 
                   className="underline text-[#0046b0] font-medium hover:text-[#00368a]"
@@ -87,8 +223,12 @@ export default function RegistroPage() {
             </label>
           </div>
 
-          <button type="submit" className="w-full bg-[#0046b0] hover:bg-[#00368a] text-white font-bold py-3 rounded-lg shadow-md transition-all mt-4">
-            Crear mi cuenta
+          <button 
+            type="submit" 
+            disabled={cargando}
+            className="w-full bg-[#0046b0] hover:bg-[#00368a] text-white font-bold py-3 rounded-lg shadow-md transition-all mt-4 disabled:opacity-50"
+          >
+            {cargando ? 'Registrando cuenta...' : 'Crear mi cuenta'}
           </button>
         </form>
 
@@ -117,32 +257,23 @@ export default function RegistroPage() {
               </div>
               <div className="space-y-1">
                 <p className="font-semibold text-gray-900">2. Restricción de Edad</p>
-                <p>El Servicio está estrictamente dirigido a personas mayores de 18 años. Al crear una cuenta, aceptar estos Términos y Condiciones y utilizar la aplicación, usted declara y garantiza que tiene al menos 18 años de edad y que posee la capacidad legal para celebrar este contrato. Si determinamos que una cuenta pertenece a un menor de edad, nos reservamos el derecho de suspender o eliminar dicha cuenta y todo su historial de datos de forma inmediata y sin previo aviso.</p>
+                <p>El Servicio está estrictamente dirigido a personas mayores de 18 años. Al crear una cuenta, aceptar estos Términos y Condiciones y utilizar la aplicación, usted declara y garantiza que tiene al menos 18 años de edad y que posee la capacidad legal para celebrar este contrato.</p>
               </div>
               <div className="space-y-1">
                 <p className="font-semibold text-gray-900">3. Naturaleza del Servicio</p>
-                <p>Todú es una herramienta digital de gestión de tiempo y gamificación diseñada para ayudar a mitigar la procrastinación. El Servicio se proporciona con fines de productividad personal y de ninguna manera sustituye el tratamiento, diagnóstico o asesoramiento médico o psicológico profesional para trastornos de atención, ansiedad u otras condiciones de salud mental.</p>
+                <p>Todú es una herramienta digital de gestión de tiempo y gamificación diseñada para ayudar a mitigar la procrastinación. El Servicio se proporciona con fines de productividad personal.</p>
               </div>
               <div className="space-y-1">
                 <p className="font-semibold text-gray-900">4. Propiedad Intelectual</p>
-                <p>Todo el contenido, diseño visual, animaciones del avatar interactivo, código fuente, logotipos y mecánicas de evolución (incluyendo la lógica de experiencia e inventario) son propiedad exclusiva de los desarrolladores de Todú. Se otorga al usuario una licencia personal, limitada, no transferible y revocable para utilizar la aplicación estrictamente para fines personales y no comerciales.</p>
+                <p>Todo el contenido, diseño visual, animaciones del avatar interactivo, código fuente y logotipos son propiedad exclusiva de los desarrolladores de Todú.</p>
               </div>
               <div className="space-y-1">
                 <p className="font-semibold text-gray-900">5. Reglas de Uso y Conducta (Fair Use)</p>
-                <p>El usuario se compromete a utilizar la aplicación de manera legítima. Queda estrictamente prohibido:</p>
-                <ul className="list-disc pl-5 space-y-2">
-                  <li>Realizar ingeniería inversa, descompilar o modificar el código del cliente o servidor.</li>
-                  <li>Manipular las peticiones de red (API) o explotar vulnerabilidades técnicas con el fin de alterar artificialmente las estadísticas de experiencia (XP), eludir la pérdida del sistema de rachas o desbloquear accesorios del inventario sin cumplir los requisitos de la aplicación.</li>
-                </ul>
-                <p className="pt-1">Cualquier violación a esta cláusula resultará en la suspensión o eliminación inmediata y permanente de la cuenta del usuario sin previo aviso.</p>
-              </div>
-              <div className="space-y-1">
-                <p className="font-semibold text-gray-900">6. Limitación de Responsabilidad</p>
-                <p>El Servicio se proporciona "tal cual" y "según disponibilidad". El equipo de desarrollo no garantiza que la aplicación esté libre de interrupciones o errores. No nos hacemos responsables por la pérdida temporal o permanente de datos (historial de tareas o rachas) ocasionada por fallas en la infraestructura de la nube, mantenimientos del servidor o problemas de conectividad en el dispositivo del usuario.</p>
+                <p>Queda estrictamente prohibido realizar ingeniería inversa o manipular las peticiones de red (API) con el fin de alterar artificialmente las estadísticas de experiencia (XP) o el sistema de rachas.</p>
               </div>
             </div>
             <div className="p-4 border-t border-gray-100 flex justify-end bg-gray-50">
-              <button onClick={() => setModalTerminos(false)} className="bg-[#0046b0] hover:bg-[#00368a] text-white font-semibold py-2 px-5 rounded-xl text-sm transition-all shadow-xs">
+              <button onClick={() => { setAceptaTerminos(true); setModalTerminos(false); }} className="bg-[#0046b0] hover:bg-[#00368a] text-white font-semibold py-2 px-5 rounded-xl text-sm transition-all shadow-xs">
                 Aceptar y Cerrar
               </button>
             </div>
@@ -162,50 +293,22 @@ export default function RegistroPage() {
             </div>
             <div className="px-6 pb-6 overflow-y-auto flex-grow text-[14px] text-gray-600 space-y-5 pr-4 leading-relaxed text-justify">
               <h3 className="font-bold text-gray-800 text-base">Aviso de Privacidad Simplificado</h3>
-              
               <div className="space-y-1">
                 <p className="font-semibold text-gray-900">Identidad del Responsable</p>
-                <p>El equipo de desarrollo de "Todú" (en adelante, "El Responsable"), con sede en Chiapas, México, en el marco de sus actividades académicas y de desarrollo de software, es responsable del uso y protección de sus datos personales, en estricto apego a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP).</p>
+                <p>El equipo de desarrollo de "Todú", con sede en Chiapas, México, es responsable del uso y protección de sus datos personales, en estricto apego a la LFPDPPP.</p>
               </div>
-
               <div className="space-y-1">
-                <p className="font-semibold text-gray-900">Datos Personal que Recabamos</p>
-                <p>Para llevar a cabo las finalidades descritas en el presente aviso, recabaremos los siguientes datos personales:</p>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li><strong className="text-gray-700">Datos de identificación y contacto:</strong> Nombre de usuario y correo electrónico.</li>
-                  <li><strong className="text-gray-700">Datos de uso y comportamiento:</strong> Historial de creación, cumplimiento y vencimiento de tareas, así como el progreso de experiencia (XP) y rachas dentro de la aplicación.</li>
-                  <li><strong className="text-gray-700">Datos de ubicación (Geolocalización):</strong> Coordenadas de latitud y longitud, las cuales se obtienen única y exclusivamente con su consentimiento expreso y explícito en el momento de uso.</li>
-                </ul>
+                <p className="font-semibold text-gray-900">Datos Personales que Recabamos</p>
+                <p>Recabaremos datos de identificación (nombre y correo), datos de comportamiento de tareas (XP y rachas), y datos de geolocalización efímera bajo su explícito consentimiento.</p>
               </div>
-
               <div className="space-y-1">
-                <p className="font-semibold text-gray-900">Tratamiento de Datos de Menores de Edad</p>
-                <p>Todú no está diseñado para, ni dirigido a, menores de 18 años. Por lo tanto, no recabamos, procesamos ni almacenamos intencionalmente datos personales ni de geolocalización de menores de edad. Si usted es padre, madre o tutor legal y tiene conocimiento de que un menor a su cargo nos ha proporcionado información personal, le solicitamos que nos contacte para proceder con la eliminación definitiva de dichos datos de nuestros servidores.</p>
-              </div>
-
-              <div className="space-y-1">
-                <p className="font-semibold text-gray-900">Finalidades del Tratamiento de Datos</p>
-                <p>Los datos personales que recabamos tienen como finalidad principal:</p>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>Crear y gestionar su perfil de usuario dentro del sistema.</li>
-                  <li>Alimentar el algoritmo de la máquina de estados que controla las animaciones, nivel de evolución y estado emocional del avatar virtual.</li>
-                  <li>Sugerir puntos de interés y zonas de descanso al finalizar la jornada, mediante el uso de interfaces de programación (APIs) de terceros.</li>
-                </ul>
-              </div>
-
-              <div className="space-y-1">
-                <p className="font-semibold text-gray-900">Cláusula Especial sobre Geolocalización</p>
-                <p>La información de geolocalización es procesada de manera efímera. Esto significa que las coordenadas se utilizan momentáneamente para realizar la consulta de lugares recomendados y no se almacenan en nuestras bases de datos, garantizando su privacidad y seguridad espacial.</p>
-              </div>
-
-              <div className="space-y-1">
-                <p className="font-semibold text-gray-900">Derechos ARCO y Revocación de Consentimiento</p>
-                <p>Usted tiene derecho a Acceder, Rectificar, Cancelar u Oponerse (Derechos ARCO) al tratamiento de sus datos personales. Podrá ejercer estos derechos, así como eliminar permanentemente su cuenta y el historial de tareas, directamente desde la sección "Ajustes de Perfil" dentro de la aplicación.</p>
+                <p className="font-semibold text-gray-900">Finalidades del Tratamiento</p>
+                <p>Gestionar su perfil de usuario, alimentar las animaciones emocionales del avatar virtual y sugerir puntos de interés cercanos.</p>
               </div>
             </div>
             <div className="p-4 border-t border-gray-100 flex justify-end bg-gray-50">
-              <button onClick={() => setModalPrivacidad(false)} className="bg-[#0046b0] hover:bg-[#00368a] text-white font-semibold py-2 px-5 rounded-xl text-sm transition-all shadow-xs">
-                Entendido
+              <button onClick={() => { setAceptaPrivacidad(true); setModalPrivacidad(false); }} className="bg-[#0046b0] hover:bg-[#00368a] text-white font-semibold py-2 px-5 rounded-xl text-sm transition-all shadow-xs">
+                Entendido y Aceptar
               </button>
             </div>
           </div>
