@@ -1,32 +1,37 @@
 'use client';
+
 import { useState } from 'react';
 
-export function useRobotState() {
-  const [emocionActual, setEmocionActual] = useState(1); // 1 = Idle / Normal
-  const [mensaje, setMensaje] = useState("¡Hola! ¿Qué tenemos para hoy?");
-
-  const gatillarEstadoTemporal = (nuevoEstadoId, mensajeTemporal, duracion = 4000) => {
-    setEmocionActual(nuevoEstadoId);
-    setMensaje(mensajeTemporal);
-    
-    setTimeout(() => {
-      setEmocionActual(1);
-      setMensaje("¡Hola! ¿Qué tenemos para hoy?");
-    }, duracion);
-  };
+export default function useRobotState() {
+  const [emocionActual, setEmocionActual] = useState('Feliz 🤖');
+  const [mensaje, setMensaje] = useState('¡Hola! Estoy listo para ayudarte a organizar tu día.');
 
   const simularAprobacionTarea = () => {
-    gatillarEstadoTemporal(2, "¡Excelente trabajo! Tarea verificada por la IA.");
+    setEmocionActual('Atento 🧐');
+    setMensaje('Revisando tus pendientes... ¡No te desvíes del objetivo!');
   };
 
-  const simularNivelUp = () => {
-    gatillarEstadoTemporal(5, "¡Genial! Has añadido una nueva meta al tablero.");
+  const simularTareaUrgente = () => {
+    setEmocionActual('Alerta ⚡');
+    setMensaje('¡Se ha añadido una nueva tarea! Vamos a darle prioridad.');
+  };
+
+  const simularTareaCompletada = () => {
+    setEmocionActual('Celebrando 🎉');
+    setMensaje('¡Excelente trabajo! Una tarea menos de la que preocuparse.');
+    
+    // Regresa a estado normal después de 3 segundos
+    setTimeout(() => {
+      setEmocionActual('Feliz 🤖');
+      setMensaje('¿Cuál será nuestro próximo paso?');
+    }, 3000);
   };
 
   return {
     emocionActual,
     mensaje,
     simularAprobacionTarea,
-    simularNivelUp,
+    simularTareaUrgente,
+    simularTareaCompletada,
   };
 }

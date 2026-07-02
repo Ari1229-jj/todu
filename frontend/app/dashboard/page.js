@@ -1,225 +1,291 @@
 'use client';
-import { useState } from 'react';
-import dynamic from 'next/dynamic';
-import { useRobotState } from '../hooks/useRobotState';
-import { Trash2, Edit3, Plus, CheckCircle, Circle, X, Save, LogOut } from 'lucide-react';
 
-// Carga Dinámica Segura (SSR: false) para el Canvas de Rive
-const ToduAvatar = dynamic(
-  () => import('../../components/ToduAvatar'),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="w-[180px] h-[180px] flex items-center justify-center text-gray-400 text-xs">
-        Cargando Todú...
-      </div>
-    )
-  }
+import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
+import { Trash2, Edit3, Plus, CheckCircle, Circle, X, Save, LogOut, Award } from 'lucide-react';
+
+// Carga dinámica CORRECTA del componente Rive del lado del cliente (Extrae .Rive explícitamente)
+const Rive = dynamic(
+  () => import('@rive-app/react-canvas').then((mod) => mod.Rive),
+  { ssr: false }
 );
 
 export default function DashboardPage() {
-  const { 
-    emocionActual, 
-    mensaje, 
-    simularAprobacionTarea, 
-    simularTareaUrgente,
-    simularNivelUp
-  } = useRobotState();
+  // URLs base del API Gateway tomadas del entorno
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
-  // --- ESTADO LOCAL COMPLETO PARA LAS TAREAS ---
-  const [tareas, setTareas] = useState([
-    { id: 1, texto: 'Configurar estructura en VS Code', completada: true },
-    { id: 2, texto: 'Diseñar la interfaz de la PWA', completada: true },
-    { id: 3, texto: 'Conectar base de datos PostgreSQL', completada: false }
-  ]);
+  // Estados de control de datos
+  const [tareas, setTareas] = useState([]);
+  const [progreso, setProgreso] = useState({ nivel: 1, xpActual: 0, progresoPorcentaje: 0 });
+  const [robotEmotion, setRobotEmotion] = useState('happy');
+  const [robotMensaje, setRobotMensaje] = useState('¡Conectado al API Gateway! Listo para trabajar.');
 
-  // Estados de control para inputs y modales
-  const [nuevaTarea, setNuevaTarea] = useState('');
-  const [showForm, setShowForm] = useState(false); // Controla el despliegue del formulario
-  const [tareaEnEdicion, setTareaEnEdicion] = useState(null);
-  const [textoEdicion, setTextoEdicion] = useState('');
+  // Estados de formularios locales
+  const [nuevoTitulo, setNuevoTitulo] = useState('');
+  const [nuevaDesc, setNuevaDesc] = useState('');
+  const [editandoId, setEditandoId] = useState(null);
+  const [textoEditado, setTextoEditado] = useState('');
 
-  // Contador de pendientes reales (incompletas)
-  const pendientes = tareas.filter(t => !t.completada).length;
+  // 1. Cargar datos iniciales del API Gateway de forma sincronizada
+  useEffect(() => {
+    const token = localStorage.getItem('todu_token');
+    const userJson = localStorage.getItem('todu_user');
+    
+    if (!token || !userJson) {
+      window.location.href = '/login';
+      return;
+    }
 
-  // --- MÉTODOS DEL CRUD ---
-  const agregarTarea = (e) => {
-    e.preventDefault();
-    if (!nuevaTarea.trim()) return;
+    const usuario = JSON.parse(userJson);
+    fetchMisTareas(token);
+    fetchProgresoYRobot(usuario.id, token);
+  }, []);
 
-    const nueva = {
-      id: Date.now(),
-      texto: nuevaTarea,
-      completada: false
-    };
-
-    setTareas([...tareas, nueva]);
-    setNuevaTarea('');
-    setShowForm(false); // Cierra el formulario tras agregar
-    simularNivelUp(); // Animación de sorpresa (5)
-  };
-
-  const alternarCompletar = (id, estadoActual) => {
-    setTareas(tareas.map(t => t.id === id ? { ...t, completada: !t.completada } : t));
-    if (!estadoActual) {
-      simularAprobacionTarea(); // Animación de felicidad (2)
+  // 2. GET /tareas/mis-tareas
+  const fetchMisTareas = async (token) => {
+    try {
+      const res = await fetch(`${API_URL}/tareas/mis-tareas`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const datos = await res.json();
+        setTareas(datos);
+      }
+    } catch (err) {
+      console.error('Error al traer tareas:', err);
     }
   };
 
-  const eliminarTarea = (id) => {
-    setTareas(tareas.filter(t => t.id !== id));
+  // 3. GET /gamificacion/progreso/:userId  y  GET /robot/estado/:userId
+  const fetchProgresoYRobot = async (userId, token) => {
+    try {
+      // Progreso de gamificación
+      const resGam = await fetch(`${API_URL}/gamificacion/progreso/${userId}`);
+      if (resGam.ok) {
+        const datosGam = await resGam.json();
+        setProgreso(datosGam);
+      }
+
+      // Estado emocional del robot
+      const resRob = await fetch(`${API_URL}/robot/estado/${userId}`);
+      if (resRob.ok) {
+        const datosRob = await resRob.json();
+        setRobotEmotion(datosRob.emotion);
+        actualizarMensajeMascota(datosRob.emotion);
+      }
+    } catch (err) {
+      console.error('Error al sincronizar servicios secundarios:', err);
+    }
   };
 
-  const activarEdicion = (tarea) => {
-    setTareaEnEdicion(tarea.id);
-    setTextoEdicion(tarea.texto);
+  const actualizarMensajeMascota = (emocion) => {
+    const mensajes = {
+      happy: '¡Excelente ritmo de trabajo! Sigue así. 😊',
+      evolved: '¡Wow! Subimos de nivel, ¡somos imparables! ✨',
+      excited: '¡Menuda racha llevas hoy! 🎉',
+      worried: 'Hay tareas acumulándose, ¡organicémonos mejor! 😟',
+      sleepy: 'Un poco de inactividad por aquí... ¿Hacemos algo? 😴'
+    };
+    setRobotMensaje(mensajes[emocion] || 'Estoy listo para ayudarte.');
   };
 
-  const guardarEdicion = (id) => {
-    if (!textoEdicion.trim()) return;
-    setTareas(tareas.map(t => t.id === id ? { ...t, texto: textoEdicion } : t));
-    setTareaEnEdicion(null);
+  // 4. POST /tareas (Creación de pendientes)
+  const agregarTarea = async (e) => {
+    e.preventDefault();
+    if (!nuevoTitulo.trim()) return;
+
+    const token = localStorage.getItem('todu_token');
+    try {
+      const res = await fetch(`${API_URL}/tareas`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          titulo: nuevoTitulo,
+          descripcion: nuevaDesc || 'Sin descripción',
+          xpValor: 30
+        })
+      });
+
+      if (res.ok) {
+        setNuevoTitulo('');
+        setNuevaDesc('');
+        fetchMisTareas(token);
+        // Disparar evento de alerta de forma local
+        setRobotEmotion('worried');
+        setRobotMensaje('Nueva tarea asignada. ¡A por ella!');
+      }
+    } catch (err) {
+      console.error('Error creando tarea:', err);
+    }
   };
+
+  // 5. PUT /tareas/:id (Alternar estado de completada / pendiente)
+  const alternarEstadoTarea = async (id, estadoActual) => {
+    const token = localStorage.getItem('todu_token');
+    const nuevoEstado = estadoActual === 'completed' ? 'pending' : 'completed';
+
+    try {
+      const res = await fetch(`${API_URL}/tareas/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ estado: nuevoEstado })
+      });
+
+      if (res.ok) {
+        fetchMisTareas(token);
+        const user = JSON.parse(localStorage.getItem('todu_user'));
+        fetchProgresoYRobot(user.id, token);
+      }
+    } catch (err) {
+      console.error('Error actualizando estado:', err);
+    }
+  };
+
+  // 6. DELETE /tareas/:id
+  const eliminarTarea = async (id) => {
+    const token = localStorage.getItem('todu_token');
+    try {
+      const res = await fetch(`${API_URL}/tareas/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) fetchMisTareas(token);
+    } catch (err) {
+      console.error('Error eliminando tarea:', err);
+    }
+  };
+
+  const cerrarSesion = () => {
+    localStorage.clear();
+    window.location.href = '/login';
+  };
+
+  // Contador dinámico basado en especificación
+  const pendientes = tareas.filter(t => t.estado !== 'completed').length;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col font-sans pb-28 relative">
-      
-      {/* BARRA SUPERIOR IDENTICA A TU CAPTURA */}
-      <nav className="bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-        <h1 className="text-2xl font-bold text-[#0046b0]">Todú</h1>
-        <button className="text-gray-400 hover:text-red-600 p-1 rounded-lg transition-colors">
-          <LogOut size={22} />
+    <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
+      {/* Navbar Superior */}
+      <header className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-[#0046b0] tracking-tight">Todú</h1>
+          <span className="text-xs bg-blue-50 text-[#0046b0] px-2 py-0.5 rounded-md font-bold border border-blue-200">
+            Nivel {progreso.nivel}
+          </span>
+        </div>
+        <button onClick={cerrarSesion} className="flex items-center gap-2 text-gray-500 hover:text-red-500 transition text-sm font-medium">
+          <LogOut size={18} />
+          Salir
         </button>
-      </nav>
+      </header>
 
-      <main className="max-w-md w-full mx-auto px-4 mt-6 flex-grow flex flex-col">
+      {/* Contenido Principal */}
+      <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-6 space-y-6">
         
-        {/* TARJETA AZUL EMOCIONAL (TU DISEÑO ACTUALIZADO) */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white p-6 rounded-3xl shadow-md mb-6 relative overflow-hidden flex items-center justify-between">
-          <div className="space-y-1 max-w-[55%]">
-            <span className="text-xs font-semibold opacity-80 flex items-center gap-1">
-              📅 Hoy, {new Date().getFullYear()}
-            </span>
-            <h2 className="text-2xl font-bold tracking-tight">Mis pendientes</h2>
-            <p className="text-xs opacity-90">
-              {pendientes === 0 ? 'Tienes 0 tareas para completar' : `Tienes ${pendientes} ${pendientes === 1 ? 'tarea' : 'tareas'} para completar`}
-            </p>
+        {/* Banner de Estado con Gamificación Real */}
+        <div className="bg-[#0046b0] text-white rounded-3xl p-6 shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="space-y-3 z-10 text-center md:text-left flex-1 w-full">
+            <h2 className="text-2xl font-extrabold tracking-tight">Mis pendientes ({pendientes})</h2>
             
-            {/* Pequeño globo de diálogo del robot integrado dentro de la tarjeta */}
-            <p className="text-[11px] bg-white/10 p-2 rounded-lg font-medium italic mt-2 border border-white/10">
-              "{mensaje}"
+            {/* Barra de Progreso de Experiencia (XP) */}
+            <div className="w-full bg-blue-900 bg-opacity-40 rounded-full h-3 mt-2 overflow-hidden border border-blue-700">
+              <div 
+                className="bg-green-400 h-full transition-all duration-500 rounded-full" 
+                style={{ width: `${progreso.progresoPorcentaje}%` }}
+              ></div>
+            </div>
+            <p className="text-xs text-blue-200 font-medium">
+              XP Actual: {progreso.xpActual} puntos • {progreso.progresoPorcentaje}% para nivel siguiente
             </p>
+
+            {/* Globo de texto de Todú Bot */}
+            <div className="mt-3 bg-white text-gray-800 text-xs font-medium px-4 py-3 rounded-2xl shadow-md inline-block max-w-xs relative text-left">
+              <span className="font-bold text-[#0046b0] block mb-0.5">Mascota ({robotEmotion}):</span>
+              "{robotMensaje}"
+            </div>
           </div>
 
-          {/* INTEGRACIÓN DEL ROBOT INTERACTIVO DENTRO DE LA TARJETA */}
-          <div className="w-[120px] h-[120px] relative flex items-center justify-center bg-white/5 rounded-2xl border border-white/10 shrink-0">
-            <ToduAvatar emocionActual={emocionActual} />
-            <span className="absolute bottom-1 right-2 bg-blue-700 text-[9px] px-1.5 py-0.5 rounded font-bold">
-              ID: {emocionActual}
-            </span>
+          {/* Renderizado Seguro del Robot Animado de Rive */}
+          <div className="relative z-10 w-[150px] h-[150px] shrink-0">
+            <Rive
+              src="/animations/robot.riv"
+              stateMachines={["RobotStateMachine"]}
+              className="w-full h-full"
+            />
           </div>
         </div>
 
-        {/* INPUT FLOTANTE TEMPORAL PARA CREACIÓN */}
-        {showForm && (
-          <form onSubmit={agregarTarea} className="bg-white p-4 rounded-2xl border border-gray-200 shadow-lg mb-4 animate-in fade-in duration-200">
-            <div className="flex gap-2">
-              <input 
-                type="text" 
-                placeholder="Escribe tu nueva tarea aquí..."
-                value={nuevaTarea}
-                onChange={(e) => setNuevaTarea(e.target.value)}
-                className="flex-grow border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-[#0046b0]"
-                autoFocus
-              />
-              <button type="submit" className="bg-[#0046b0] text-white p-2 rounded-xl">
-                <Plus size={20} />
-              </button>
-            </div>
-          </form>
-        )}
+        {/* Formulario para Añadir Tareas de Acuerdo al API Spec */}
+        <form onSubmit={agregarTarea} className="flex flex-col gap-2 bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={nuevoTitulo}
+              onChange={(e) => setNuevoTitulo(e.target.value)}
+              placeholder="¿Qué vas a lograr hoy? (Título de la tarea)..."
+              className="flex-1 px-3 py-2 text-sm bg-gray-50 rounded-xl outline-none text-gray-700 border border-gray-200 focus:border-[#0046b0]"
+              required
+            />
+            <button type="submit" className="bg-[#0046b0] hover:bg-blue-700 text-white p-3 rounded-xl transition flex items-center justify-center shrink-0">
+              <Plus size={20} />
+            </button>
+          </div>
+          <input
+            type="text"
+            value={nuevaDesc}
+            onChange={(e) => setNuevaDesc(e.target.value)}
+            placeholder="Añade una descripción opcional (ej. Ir al súper)"
+            className="px-3 py-1.5 text-xs bg-transparent outline-none text-gray-500 placeholder-gray-400"
+          />
+        </form>
 
-        {/* LISTADO DE TAREAS INTERACTIVO CON TU ESTILO VISUAL */}
-        <div className="space-y-3 flex-grow">
+        {/* Lista de Tareas Enlazada al Servicio de Tareas */}
+        <div className="space-y-3">
           {tareas.length === 0 ? (
-            <p className="text-center text-sm text-gray-400 py-12">No hay tareas. ¡Buen trabajo!</p>
+            <p className="text-center text-sm text-gray-400 py-8">No se encontraron registros de tareas pendientes en el servidor.</p>
           ) : (
             tareas.map((tarea) => (
               <div 
-                key={tarea.id} 
-                className={`bg-white p-4 rounded-2xl border flex items-center justify-between gap-3 shadow-sm transition-all ${
-                  tarea.completada ? 'border-gray-100 opacity-60' : 'border-gray-200/80'
+                key={tarea.id}
+                className={`flex items-center justify-between p-4 rounded-2xl border bg-white transition duration-200 shadow-sm ${
+                  tarea.estado === 'completed' ? 'border-gray-100 opacity-60' : 'border-gray-200'
                 }`}
               >
-                <div className="flex items-center gap-4 flex-grow overflow-hidden">
-                  {/* Selector circular */}
+                <div className="flex items-center gap-4 flex-1 min-w-0">
+                  {/* Botón Checkbox de estado */}
                   <button 
-                    onClick={() => alternarCompletar(tarea.id, tarea.completada)}
-                    className="text-gray-300 hover:text-[#0046b0] transition-colors shrink-0"
+                    onClick={() => alternarEstadoTarea(tarea.id, tarea.estado)}
+                    className={`shrink-0 transition ${tarea.estado === 'completed' ? 'text-green-500' : 'text-gray-400 hover:text-[#0046b0]'}`}
                   >
-                    {tarea.completada ? (
-                      <CheckCircle size={24} className="text-green-500" />
-                    ) : (
-                      <Circle size={24} className="text-gray-300" />
-                    )}
+                    {tarea.estado === 'completed' ? <CheckCircle size={22} className="fill-green-50" /> : <Circle size={22} />}
                   </button>
 
-                  {/* Modo Edición o Texto Normal */}
-                  {tareaEnEdicion === tarea.id ? (
-                    <input 
-                      type="text"
-                      value={textoEdicion}
-                      onChange={(e) => setTextoEdicion(e.target.value)}
-                      className="border-b-2 border-[#0046b0] flex-grow text-sm outline-none py-0.5 text-gray-800 font-medium"
-                      autoFocus
-                    />
-                  ) : (
-                    <p className={`text-sm font-medium truncate flex-grow ${
-                      tarea.completada ? 'line-through text-gray-400' : 'text-gray-700'
-                    }`}>
-                      {tarea.texto}
-                    </p>
-                  )}
+                  <div className="flex flex-col min-w-0">
+                    <span className={`text-sm font-bold text-gray-800 truncate ${tarea.estado === 'completed' ? 'line-through text-gray-400' : ''}`}>
+                      {tarea.titulo}
+                    </span>
+                    <span className="text-xs text-gray-400 truncate">
+                      {tarea.descripcion} • <strong className="text-blue-600">+{tarea.xpValor} XP</strong>
+                    </span>
+                  </div>
                 </div>
 
-                {/* Botones de acción lateral */}
-                <div className="flex items-center gap-1 shrink-0">
-                  {tareaEnEdicion === tarea.id ? (
-                    <>
-                      <button onClick={() => guardarEdicion(tarea.id)} className="text-green-600 hover:bg-green-50 p-1.5 rounded-xl">
-                        <Save size={18} />
-                      </button>
-                      <button onClick={() => setTareaEnEdicion(null)} className="text-gray-400 p-1.5 rounded-xl">
-                        <X size={18} />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      {!tarea.completada && (
-                        <button onClick={() => activarEdicion(tarea)} className="text-gray-400 hover:text-gray-600 p-1.5 rounded-xl">
-                          <Edit3 size={16} />
-                        </button>
-                      )}
-                      <button onClick={() => eliminarTarea(tarea.id)} className="text-gray-400 hover:text-red-500 p-1.5 rounded-xl">
-                        <Trash2 size={16} />
-                      </button>
-                    </>
-                  )}
+                {/* Acciones del CRUD */}
+                <div className="flex items-center gap-1 ml-4 shrink-0">
+                  <button onClick={() => eliminarTarea(tarea.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition">
+                    <Trash2 size={16} />
+                  </button>
                 </div>
-
               </div>
             ))
           )}
         </div>
-
-        {/* BOTÓN FLOTANTE AZUL "+" (IGUAL A TU CAPTURA) */}
-        <button 
-          onClick={() => setShowForm(!showForm)}
-          className="fixed bottom-6 right-6 bg-[#0046b0] hover:bg-[#00368a] text-white p-4 rounded-full shadow-xl transition-transform active:scale-95 z-20"
-        >
-          {showForm ? <X size={26} /> : <Plus size={26} />}
-        </button>
-
       </main>
     </div>
   );
