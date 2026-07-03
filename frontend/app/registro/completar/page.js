@@ -1,40 +1,95 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 import { ArrowLeft, X } from 'lucide-react';
 
-export default function NombreUsuarioPage() {
-  // Estado para el input de usuario y la casilla de verificación única
+export default function RegistroCompletarPage() {
+  // Estado para el formulario y manejo de UI
   const [formData, setFormData] = useState({
     username: '',
     aceptaTerminosYPrivacidad: false,
   });
 
-  // Control de estados de los modales emergentes
+  const [loading, setLoading] = useState(false);
+  const [errorServer, setErrorServer] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  // Control de estados de los modales legales emergentes
   const [modalTerminos, setModalTerminos] = useState(false);
   const [modalPrivacidad, setModalPrivacidad] = useState(false);
 
-  // Manejador general de cambios
+  // Manejador general de cambios en inputs
   const handleChange = (e) => {
     const { name, type, checked, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
+    // Limpiar errores previos si el usuario sigue escribiendo
+    if (errorServer) setErrorServer('');
   };
 
-  const handleSubmit = (e) => {
+  // Petición HTTP conectada al Backend a través de Ngrok
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (formData.aceptaTerminosYPrivacidad && formData.username.trim().length > 0) {
-      console.log('Formulario enviado con éxito:', formData);
+    
+    // Validaciones previas del lado del cliente
+    if (!formData.aceptaTerminosYPrivacidad) return;
+    if (formData.username.trim().length < 2) {
+      setErrorServer('El nombre de usuario debe tener al menos 2 caracteres.');
+      return;
+    }
+
+    setLoading(true);
+    setErrorServer('');
+
+    try {
+      // Lee dinámicamente la URL base de tu archivo .env.local
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      
+      const response = await fetch(`${apiUrl}/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: formData.username.trim(),
+          // Nota: Si tu backend requiere email/password temporales en este paso,
+          // puedes agregarlos aquí o estructurar según tus DTOs / Casos de Uso.
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Mapeo preciso de códigos HTTP devueltos por tus controladores
+        if (response.status === 400) {
+          throw new Error(data.message || 'Error de validación (Zod).');
+        } else if (response.status === 409) {
+          throw new Error('Ese nombre de usuario ya se encuentra registrado.');
+        } else {
+          throw new Error(data.message || 'Ocurrió un error inesperado en el servidor.');
+        }
+      }
+
+      // Registro exitoso
+      setSuccess(true);
+      console.log('Usuario registrado exitosamente mediante Arquitectura Hexagonal:', data);
+      
+      // Aquí puedes redirigir al Dashboard:
+      // window.location.href = '/dashboard';
+
+    } catch (err) {
+      setErrorServer(err.message || 'No se pudo conectar con el servidor backend.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 font-sans">
       
-      {/* Contenedor tipo Tarjeta Móvil */}
+      {/* Tarjeta de Interfaz Móvil */}
       <div className="w-full max-w-sm bg-white rounded-[2.5rem] shadow-xl p-8 flex flex-col min-h-[600px] relative">
         
         {/* Botón de regreso */}
@@ -42,7 +97,7 @@ export default function NombreUsuarioPage() {
           <ArrowLeft size={24} />
         </button>
 
-        {/* Ilustración geométrica central superior */}
+        {/* Ilustración geométrica superior */}
         <div className="flex justify-center mt-12 mb-8 relative">
           <div className="w-32 h-32 bg-blue-50/70 rounded-2xl relative flex items-center justify-center">
             <div className="absolute -top-1 -right-3 w-4 h-4 bg-yellow-400 rounded-xs rotate-12 shadow-xs"></div>
@@ -50,7 +105,7 @@ export default function NombreUsuarioPage() {
           </div>
         </div>
 
-        {/* Textos de cabecera */}
+        {/* Cabecera de Textos */}
         <div className="text-center space-y-3 mb-8">
           <h1 className="text-[26px] font-bold text-gray-900 leading-tight px-2">
             ¿Cómo deberíamos llamarte?
@@ -60,11 +115,11 @@ export default function NombreUsuarioPage() {
           </p>
         </div>
 
-        {/* Formulario */}
+        {/* Formulario e Implementación del Click */}
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col justify-between space-y-6">
           
           <div className="space-y-5">
-            {/* Input de Usuario */}
+            {/* Input de Nombre de Usuario */}
             <div className="relative">
               <div className={`flex items-center bg-gray-50 border border-gray-100 rounded-2xl px-5 py-4 transition-all duration-200
                 ${formData.username ? 'ring-2 ring-blue-500 bg-white shadow-xs' : ''}`}>
@@ -75,10 +130,11 @@ export default function NombreUsuarioPage() {
                   value={formData.username}
                   onChange={handleChange}
                   placeholder="usuario"
-                  className="w-full bg-transparent text-gray-800 placeholder-gray-400 text-base font-medium outline-none"
+                  disabled={loading || success}
+                  className="w-full bg-transparent text-gray-800 placeholder-gray-400 text-base font-medium outline-none disabled:opacity-50"
                   required
                 />
-                {formData.username.trim().length > 2 && (
+                {formData.username.trim().length >= 2 && !errorServer && (
                   <span className="text-emerald-500 flex items-center ml-2">
                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -88,21 +144,34 @@ export default function NombreUsuarioPage() {
               </div>
             </div>
 
-            {/* ================= CASILLA ÚNICA DE VALIDACIÓN ================= */}
+            {/* Mensajes de feedback del backend */}
+            {errorServer && (
+              <p className="text-red-500 text-xs font-semibold text-center bg-red-50 py-2 px-3 rounded-xl border border-red-100">
+                {errorServer}
+              </p>
+            )}
+            {success && (
+              <p className="text-emerald-600 text-sm font-bold text-center bg-emerald-50 py-2 px-3 rounded-xl border border-emerald-100">
+                ¡Perfil configurado con éxito!
+              </p>
+            )}
+
+            {/* Casilla Única de Validación Legal */}
             <label className="flex items-start gap-3 text-[13px] text-gray-500 leading-snug font-medium cursor-pointer px-1 select-none">
               <input 
                 type="checkbox" 
                 name="aceptaTerminosYPrivacidad"
                 checked={formData.aceptaTerminosYPrivacidad}
                 onChange={handleChange}
-                className="w-5 h-5 rounded border-gray-300 text-[#0066ff] focus:ring-[#0066ff] cursor-pointer shrink-0 mt-0.5" 
+                disabled={loading || success}
+                className="w-5 h-5 rounded border-gray-300 text-[#0066ff] focus:ring-[#0066ff] cursor-pointer shrink-0 mt-0.5 disabled:opacity-50" 
               />
               <span>
                 Confirmas que tienes al menos 18 años y que has leído y aceptas nuestros{' '}
                 <span 
                   onClick={(e) => {
                     e.preventDefault(); 
-                    e.stopPropagation(); 
+                    e.stopPropagation(); // Evita marcar/desmarcar la casilla al hacer clic en el texto
                     setModalTerminos(true);
                   }} 
                   className="text-[#0066ff] font-bold hover:underline"
@@ -124,24 +193,24 @@ export default function NombreUsuarioPage() {
             </label>
           </div>
 
-          {/* BOTÓN DINÁMICO INTERACTIVO */}
+          {/* Botón de Enviar Dinámico (Se activa al marcar el checkbox) */}
           <div className="pt-4">
             <button 
               type="submit" 
-              disabled={!formData.aceptaTerminosYPrivacidad}
+              disabled={!formData.aceptaTerminosYPrivacidad || loading || success}
               className={`w-full font-bold py-4 rounded-2xl shadow-xs transition-all duration-200 text-base
-                ${formData.aceptaTerminosYPrivacidad
+                ${formData.aceptaTerminosYPrivacidad && !loading && !success
                   ? 'bg-[#0066ff] hover:bg-[#0052cc] text-white cursor-pointer active:scale-[0.99] shadow-blue-100' 
                   : 'bg-[#e9ecef] text-[#94a3b8] cursor-not-allowed shadow-none'
                 }`}
             >
-              Comenzar
+              {loading ? 'Procesando...' : 'Comenzar'}
             </button>
           </div>
         </form>
       </div>
 
-      {/* ================= RECUADRO EMERGENTE: TÉRMINOS Y CONDICIONES ================= */}
+      {/* ================= MODAL DESLIZABLE: TÉRMINOS Y CONDICIONES ================= */}
       {modalTerminos && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl flex flex-col max-h-[75vh] overflow-hidden border border-gray-100">
@@ -151,7 +220,7 @@ export default function NombreUsuarioPage() {
                 <X size={22} />
               </button>
             </div>
-            {/* Contenedor deslizable (overflow-y-auto) */}
+            {/* Contenedor del scroll text */}
             <div className="px-6 py-4 overflow-y-auto flex-grow text-[14px] text-gray-600 space-y-5 pr-4 leading-relaxed text-justify">
               <div className="space-y-1">
                 <p className="font-bold text-gray-900">1. Aceptación de los Términos</p>
@@ -167,7 +236,7 @@ export default function NombreUsuarioPage() {
               </div>
               <div className="space-y-1">
                 <p className="font-bold text-gray-900">4. Propiedad Intelectual</p>
-                <p>Todo el contenido, diseño visual, animaciones del avatar interactivo, código fuente, logotipos y mecánicas de evolución (incluyendo la lógica de experiencia e inventario) son propiedad exclusiva de los desarrolladores de Todú. Se otorga al usuario una licencia personal, limitada, no transferible y revocable para utilizar la aplicación estrictamente para fines personales y no comerciales.</p>
+                <p>Todo el contenido, diseño visual, animaciones del avatar interactivo, código fuente, logotipos y mecánicas de evolución (incluyendo la lógica de experiencia e inventario) son propiedad exclusiva de los desarrolladores de Todú. Se otorga al usuario una licencia personal, limitada, no transferible y revocable para utilizar la aplicación strictly para fines personales y no comerciales.</p>
               </div>
               <div className="space-y-1">
                 <p className="font-bold text-gray-900">5. Reglas de Uso y Conducta (Fair Use)</p>
@@ -192,14 +261,14 @@ export default function NombreUsuarioPage() {
                 }} 
                 className="bg-[#0066ff] hover:bg-[#0052cc] text-white font-semibold py-2.5 px-6 rounded-xl text-sm transition-all"
               >
-                Entendido
+                Aceptar y Continuar
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ================= RECUADRO EMERGENTE: AVISO DE PRIVACIDAD ================= */}
+      {/* ================= MODAL DESLIZABLE: AVISO DE PRIVACIDAD ================= */}
       {modalPrivacidad && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl flex flex-col max-h-[75vh] overflow-hidden border border-gray-100">
@@ -209,7 +278,7 @@ export default function NombreUsuarioPage() {
                 <X size={22} />
               </button>
             </div>
-            {/* Contenedor deslizable (overflow-y-auto) */}
+            {/* Contenedor del scroll text */}
             <div className="px-6 py-4 overflow-y-auto flex-grow text-[14px] text-gray-600 space-y-5 pr-4 leading-relaxed text-justify">
               <div className="space-y-1">
                 <p className="font-bold text-gray-900">Identidad del Responsable</p>
@@ -246,6 +315,48 @@ export default function NombreUsuarioPage() {
                 <p>Usted tiene derecho a Acceder, Rectificar, Cancelar u Oponerse (Derechos ARCO) al tratamiento de sus datos personales. Podrá ejercer estos derechos, así como eliminar permanentemente su cuenta y el historial de tareas, directamente desde la sección "Ajustes de Perfil" dentro de la aplicación.</p>
               </div>
             </div>
+            {/* ... Asegúrate de que lo de arriba continúe aquí y cierra el primer modal así: */}
+            <div className="p-4 border-t border-gray-100 flex justify-end bg-gray-50">
+              <button 
+                type="button"
+                onClick={() => {
+                  setFormData(prev => ({ ...prev, aceptaTerminosYPrivacidad: true }));
+                  setModalTerminos(false);
+                }} 
+                className="bg-[#0066ff] hover:bg-[#0052cc] text-white font-semibold py-2.5 px-6 rounded-xl text-sm transition-all"
+              >
+                Aceptar y Continuar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL DESLIZABLE: AVISO DE PRIVACIDAD ================= */}
+      {modalPrivacidad && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl flex flex-col max-h-[75vh] overflow-hidden border border-gray-100">
+            <div className="px-6 pt-6 pb-4 flex justify-between items-center bg-white sticky top-0 border-b border-gray-50">
+              <h2 className="text-xl font-bold text-[#0066ff]">Aviso de Privacidad de Todú</h2>
+              <button onClick={() => setModalPrivacidad(false)} className="text-gray-400 hover:text-gray-700 p-1.5 rounded-full hover:bg-gray-100 transition-colors">
+                <X size={22} />
+              </button>
+            </div>
+            {/* Contenedor del scroll text */}
+            <div className="px-6 py-4 overflow-y-auto flex-grow text-[14px] text-gray-600 space-y-5 pr-4 leading-relaxed text-justify">
+              <div className="space-y-1">
+                <p className="font-bold text-gray-900">Identidad del Responsable</p>
+                <p>El equipo de desarrollo de "Todú", en el marco de sus actividades académicas, es responsable del uso y protección de sus datos personales, en estricto apego a las normativas de privacidad.</p>
+              </div>
+              <div className="space-y-1">
+                <p className="font-bold text-gray-900">Datos Personales que Recabamos</p>
+                <p>Para llevar a cabo las finalidades descritas, recabaremos su nombre de usuario, correo electrónico e historial de tareas asociadas.</p>
+              </div>
+              <div className="space-y-1">
+                <p className="font-bold text-gray-900">Tratamiento de Datos de Menores de Edad</p>
+                <p>Todú no está diseñado para menores de 18 años. No recabamos ni almacenamos intencionalmente datos de menores.</p>
+              </div>
+            </div>
             <div className="p-4 border-t border-gray-100 flex justify-end bg-gray-50">
               <button 
                 type="button"
@@ -255,7 +366,7 @@ export default function NombreUsuarioPage() {
                 }} 
                 className="bg-[#0066ff] hover:bg-[#0052cc] text-white font-semibold py-2.5 px-6 rounded-xl text-sm transition-all"
               >
-                Entendido
+                Aceptar y Continuar
               </button>
             </div>
           </div>
